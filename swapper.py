@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 from typing import List, Union, Dict, Set, Tuple
 
-
+#
 def getFaceSwapModel(model_path: str):
     model = insightface.model_zoo.get_model(model_path)
     return model
