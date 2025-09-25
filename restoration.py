@@ -6,6 +6,8 @@ import cv2
 import torch
 import torch.nn.functional as F
 from torchvision.transforms.functional import normalize
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from basicsr.utils import imwrite, img2tensor, tensor2img
 from basicsr.utils.download_util import load_file_from_url
@@ -15,6 +17,8 @@ from basicsr.archs.rrdbnet_arch import RRDBNet
 from basicsr.utils.realesrgan_utils import RealESRGANer
 from basicsr.utils.registry import ARCH_REGISTRY
 
+# Thread pool for face restoration
+restoration_executor = ThreadPoolExecutor(max_workers=1)
 
 def check_ckpts():
     pretrain_model_url = {
@@ -57,7 +61,7 @@ def set_realesrgan():
     return upsampler
 
 
-def face_restoration(img, background_enhance, face_upsample, upscale, codeformer_fidelity, upsampler, codeformer_net, device):
+def face_restoration_sync(img, background_enhance, face_upsample, upscale, codeformer_fidelity, upsampler, codeformer_net, device):
     """Run a single prediction on the model"""
     try: # global try
         # take the default setting for the demo
@@ -156,4 +160,13 @@ def face_restoration(img, background_enhance, face_upsample, upscale, codeformer
         return restored_img
     except Exception as error:
         print('Global exception', error)
-        return None, None
+        return None
+    
+async def face_restoration(img, background_enhance, face_upsample, upscale, codeformer_fidelity, upsampler, codeformer_net, device):
+    """Async wrapper for face restoration"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        restoration_executor, 
+        face_restoration_sync, 
+        img, background_enhance, face_upsample, upscale, codeformer_fidelity, upsampler, codeformer_net, device
+    )

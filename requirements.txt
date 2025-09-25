@@ -16,3 +16,6 @@ torchvision
 tqdm
 yapf
 lpips
+python-multipart
+uvicorn
+fastapi
