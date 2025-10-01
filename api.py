@@ -10,8 +10,13 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse
 import tempfile
 import uuid
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 app = FastAPI(title="Face Swap API", description="Face swap service using InsightFace")
+
+# Thread pool for CPU-intensive tasks
+executor = ThreadPoolExecutor(max_workers=2)
 
 def getFaceSwapModel(model_path: str):
     model = insightface.model_zoo.get_model(model_path)
@@ -43,8 +48,8 @@ def swap_face(face_swapper, source_faces, target_faces, source_index, target_ind
     target_face = target_faces[target_index]
     return face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
 
-def process_face_swap(source_imgs: List[Image.Image], target_img: Image.Image, 
-                     source_indexes: str, target_indexes: str, model_path: str):
+def process_face_swap_sync(source_imgs: List[Image.Image], target_img: Image.Image, 
+                          source_indexes: str, target_indexes: str, model_path: str):
     # load machine default available providers
     providers = onnxruntime.get_available_providers()
 
@@ -150,6 +155,16 @@ def process_face_swap(source_imgs: List[Image.Image], target_img: Image.Image,
     result_image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
     return result_image
 
+async def process_face_swap(source_imgs: List[Image.Image], target_img: Image.Image, 
+                           source_indexes: str, target_indexes: str, model_path: str):
+    """Async wrapper for face swap processing"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        executor, 
+        process_face_swap_sync, 
+        source_imgs, target_img, source_indexes, target_indexes, model_path
+    )
+
 @app.get("/")
 async def root():
     return {"message": "Face Swap API is running!"}
@@ -189,8 +204,8 @@ async def swap_faces(
             source_img_data = await source_img.read()
             source_imgs.append(Image.open(tempfile.BytesIO(source_img_data)))
 
-        # Process face swap
-        result_image = process_face_swap(source_imgs, target_img, source_indexes, target_indexes, model_path)
+        # Process face swap (now async)
+        result_image = await process_face_swap(source_imgs, target_img, source_indexes, target_indexes, model_path)
         
         # Save result to temporary file
         temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
